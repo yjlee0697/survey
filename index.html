@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>설문 조사 빌더</title>
+    <style>
+      :root {
+        --bg: #f0ebf8;
+        --card: #ffffff;
+        --primary: #673ab7;
+        --primary-soft: #ede7f6;
+        --text: #202124;
+        --subtext: #5f6368;
+        --border: #dadce0;
+      }
+
+      * {
+        box-sizing: border-box;
+        font-family: "Noto Sans KR", "Malgun Gothic", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        color: var(--text);
+        background: var(--bg);
+      }
+
+      .container {
+        max-width: 860px;
+        margin: 32px auto;
+        padding: 0 16px 32px;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 14px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      }
+
+      .header-card {
+        border-top: 10px solid var(--primary);
+      }
+
+      input[type="text"],
+      textarea,
+      select {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 15px;
+        padding: 10px 12px;
+        color: var(--text);
+      }
+
+      textarea {
+        min-height: 84px;
+        resize: vertical;
+      }
+
+      .title-input {
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        font-size: 32px;
+        font-weight: 600;
+        padding: 4px 0;
+      }
+
+      .title-input:focus,
+      .desc-input:focus,
+      .question-title:focus,
+      .option-input:focus,
+      .type-select:focus {
+        outline: none;
+        border-color: var(--primary);
+      }
+
+      .desc-input {
+        margin-top: 10px;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .question-header {
+        display: grid;
+        grid-template-columns: 1fr 190px;
+        gap: 12px;
+      }
+
+      .question-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+
+      .type-select {
+        background: #fff;
+      }
+
+      .options {
+        margin-top: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .option-row {
+        display: grid;
+        grid-template-columns: 26px 1fr auto;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .dot {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--subtext);
+        border-radius: 50%;
+      }
+
+      .square {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--subtext);
+        border-radius: 3px;
+      }
+
+      .ghost {
+        border: 1px dashed var(--border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        color: var(--subtext);
+      }
+
+      button {
+        border: 1px solid transparent;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      .btn-soft {
+        background: var(--primary-soft);
+        color: var(--primary);
+      }
+
+      .btn-danger {
+        background: #fde7e9;
+        color: #b3261e;
+      }
+
+      .question-actions {
+        margin-top: 14px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .footer-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .preview {
+        margin-top: 18px;
+        border-top: 1px solid var(--border);
+        padding-top: 14px;
+      }
+
+      .preview pre {
+        background: #111827;
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 12px;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section class="card header-card">
+        <input id="surveyTitle" class="title-input" type="text" value="제목 없는 설문지" />
+        <textarea id="surveyDescription" class="desc-input" placeholder="설문 설명을 입력하세요"></textarea>
+      </section>
+
+      <div id="questionList"></div>
+
+      <section class="card">
+        <div class="footer-actions">
+          <div class="row">
+            <button id="addQuestionBtn" class="btn-soft" type="button">+ 질문 추가</button>
+            <button id="previewBtn" class="btn-primary" type="button">JSON 미리보기</button>
+          </div>
+          <button id="copyBtn" class="btn-soft" type="button">결과 복사</button>
+        </div>
+        <div class="preview" id="previewBox" hidden>
+          <pre id="previewJson"></pre>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const questionList = document.getElementById('questionList');
+      const addQuestionBtn = document.getElementById('addQuestionBtn');
+      const previewBtn = document.getElementById('previewBtn');
+      const copyBtn = document.getElementById('copyBtn');
+      const previewBox = document.getElementById('previewBox');
+      const previewJson = document.getElementById('previewJson');
+
+      const questionTypes = [
+        { value: 'short_answer', label: '단답형', hasOptions: false },
+        { value: 'paragraph', label: '장문형', hasOptions: false },
+        { value: 'multiple_choice', label: '객관식', hasOptions: true, icon: 'dot' },
+        { value: 'checkbox', label: '체크박스', hasOptions: true, icon: 'square' },
+        { value: 'dropdown', label: '드롭다운', hasOptions: true, icon: 'ghost' },
+      ];
+
+      const state = {
+        questions: [],
+      };
+
+      function addQuestion(data = {}) {
+        const defaultType = 'multiple_choice';
+        state.questions.push({
+          title: data.title ?? '질문',
+          type: data.type ?? defaultType,
+          required: data.required ?? false,
+          options: data.options ?? ['옵션 1'],
+        });
+        render();
+      }
+
+      function removeQuestion(index) {
+        state.questions.splice(index, 1);
+        render();
+      }
+
+      function updateQuestion(index, patch) {
+        state.questions[index] = { ...state.questions[index], ...patch };
+      }
+
+      function addOption(index) {
+        const nextNumber = state.questions[index].options.length + 1;
+        state.questions[index].options.push(`옵션 ${nextNumber}`);
+        render();
+      }
+
+      function removeOption(questionIndex, optionIndex) {
+        const options = state.questions[questionIndex].options;
+        if (options.length === 1) return;
+        options.splice(optionIndex, 1);
+        render();
+      }
+
+      function getSurveyData() {
+        return {
+          title: document.getElementById('surveyTitle').value.trim(),
+          description: document.getElementById('surveyDescription').value.trim(),
+          questions: state.questions.map((q) => ({
+            title: q.title,
+            type: q.type,
+            required: q.required,
+            options: needsOptions(q.type) ? q.options : [],
+          })),
+        };
+      }
+
+      function needsOptions(type) {
+        return questionTypes.find((t) => t.value === type)?.hasOptions;
+      }
+
+      function createTypeSelect(selectedType, idx) {
+        const select = document.createElement('select');
+        select.className = 'type-select';
+        questionTypes.forEach((type) => {
+          const option = document.createElement('option');
+          option.value = type.value;
+          option.textContent = type.label;
+          option.selected = type.value === selectedType;
+          select.appendChild(option);
+        });
+
+        select.addEventListener('change', (e) => {
+          const type = e.target.value;
+          const withOptions = needsOptions(type);
+          updateQuestion(idx, {
+            type,
+            options: withOptions ? (state.questions[idx].options.length ? state.questions[idx].options : ['옵션 1']) : [],
+          });
+          render();
+        });
+
+        return select;
+      }
+
+      function createQuestionCard(question, idx) {
+        const card = document.createElement('section');
+        card.className = 'card';
+
+        const header = document.createElement('div');
+        header.className = 'question-header';
+
+        const titleInput = document.createElement('input');
+        titleInput.className = 'question-title';
+        titleInput.type = 'text';
+        titleInput.value = question.title;
+        titleInput.addEventListener('input', (e) => updateQuestion(idx, { title: e.target.value }));
+
+        const typeSelect = createTypeSelect(question.type, idx);
+
+        header.append(titleInput, typeSelect);
+        card.appendChild(header);
+
+        if (needsOptions(question.type)) {
+          const options = document.createElement('div');
+          options.className = 'options';
+
+          question.options.forEach((opt, optionIdx) => {
+            const row = document.createElement('div');
+            row.className = 'option-row';
+
+            const icon = document.createElement('span');
+            icon.className = question.type === 'checkbox' ? 'square' : question.type === 'dropdown' ? 'ghost' : 'dot';
+
+            const optionInput = document.createElement('input');
+            optionInput.className = 'option-input';
+            optionInput.type = 'text';
+            optionInput.value = opt;
+            optionInput.addEventListener('input', (e) => {
+              question.options[optionIdx] = e.target.value;
+            });
+
+            const removeOptionBtn = document.createElement('button');
+            removeOptionBtn.type = 'button';
+            removeOptionBtn.className = 'btn-danger';
+            removeOptionBtn.textContent = '삭제';
+            removeOptionBtn.addEventListener('click', () => removeOption(idx, optionIdx));
+
+            row.append(icon, optionInput, removeOptionBtn);
+            options.appendChild(row);
+          });
+
+          const addOptionBtn = document.createElement('button');
+          addOptionBtn.type = 'button';
+          addOptionBtn.className = 'btn-soft';
+          addOptionBtn.textContent = '+ 옵션 추가';
+          addOptionBtn.addEventListener('click', () => addOption(idx));
+
+          options.appendChild(addOptionBtn);
+          card.appendChild(options);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'question-actions';
+
+        const requiredLabel = document.createElement('label');
+        requiredLabel.className = 'row';
+        const requiredCheck = document.createElement('input');
+        requiredCheck.type = 'checkbox';
+        requiredCheck.checked = question.required;
+        requiredCheck.addEventListener('change', (e) => updateQuestion(idx, { required: e.target.checked }));
+        requiredLabel.append(requiredCheck, document.createTextNode('필수'));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'btn-danger';
+        deleteBtn.textContent = '질문 삭제';
+        deleteBtn.addEventListener('click', () => removeQuestion(idx));
+
+        actions.append(requiredLabel, deleteBtn);
+        card.appendChild(actions);
+
+        return card;
+      }
+
+      function render() {
+        questionList.innerHTML = '';
+        state.questions.forEach((question, idx) => {
+          questionList.appendChild(createQuestionCard(question, idx));
+        });
+      }
+
+      addQuestionBtn.addEventListener('click', () => addQuestion());
+
+      previewBtn.addEventListener('click', () => {
+        previewBox.hidden = false;
+        previewJson.textContent = JSON.stringify(getSurveyData(), null, 2);
+      });
+
+      copyBtn.addEventListener('click', async () => {
+        const payload = JSON.stringify(getSurveyData(), null, 2);
+        try {
+          await navigator.clipboard.writeText(payload);
+          copyBtn.textContent = '복사 완료';
+          setTimeout(() => (copyBtn.textContent = '결과 복사'), 1200);
+        } catch {
+          previewBox.hidden = false;
+          previewJson.textContent = payload;
+          alert('클립보드 접근이 차단되어 JSON 미리보기를 표시합니다.');
+        }
+      });
+
+      addQuestion({
+        title: '어떤 기능이 가장 필요하신가요?',
+        type: 'multiple_choice',
+        options: ['AI 분석', '결과 차트', '팀 공유'],
+        required: true,
+      });
+      addQuestion({
+        title: '추가 의견을 남겨주세요',
+        type: 'paragraph',
+        required: false,
+      });
+    </script>
+  </body>
+</html>
