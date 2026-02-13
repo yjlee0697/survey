@@ -112,9 +112,13 @@
 
       .option-row {
         display: grid;
-        grid-template-columns: 26px 1fr auto;
+        grid-template-columns: 26px 1fr 220px auto;
         align-items: center;
         gap: 10px;
+      }
+
+      .branch-select {
+        font-size: 14px;
       }
 
       .dot {
@@ -233,19 +237,59 @@
         questions: [],
       };
 
+      let questionSeq = 1;
+      let optionSeq = 1;
+
+      function createQuestionId() {
+        return `q_${questionSeq++}`;
+      }
+
+      function createOptionId() {
+        return `o_${optionSeq++}`;
+      }
+
+      function normalizeOptions(options = []) {
+        return options.map((opt, index) => {
+          if (typeof opt === 'string') {
+            return {
+              id: createOptionId(),
+              text: opt,
+              nextQuestionId: null,
+            };
+          }
+
+          return {
+            id: opt.id ?? createOptionId(),
+            text: opt.text ?? `옵션 ${index + 1}`,
+            nextQuestionId: opt.nextQuestionId ?? null,
+          };
+        });
+      }
+
       function addQuestion(data = {}) {
         const defaultType = 'multiple_choice';
         state.questions.push({
+          id: data.id ?? createQuestionId(),
           title: data.title ?? '질문',
           type: data.type ?? defaultType,
           required: data.required ?? false,
-          options: data.options ?? ['옵션 1'],
+          options: normalizeOptions(data.options ?? ['옵션 1']),
         });
         render();
       }
 
       function removeQuestion(index) {
+        const removed = state.questions[index];
         state.questions.splice(index, 1);
+
+        state.questions.forEach((question) => {
+          question.options.forEach((opt) => {
+            if (opt.nextQuestionId === removed.id) {
+              opt.nextQuestionId = null;
+            }
+          });
+        });
+
         render();
       }
 
@@ -255,7 +299,11 @@
 
       function addOption(index) {
         const nextNumber = state.questions[index].options.length + 1;
-        state.questions[index].options.push(`옵션 ${nextNumber}`);
+        state.questions[index].options.push({
+          id: createOptionId(),
+          text: `옵션 ${nextNumber}`,
+          nextQuestionId: null,
+        });
         render();
       }
 
@@ -271,10 +319,20 @@
           title: document.getElementById('surveyTitle').value.trim(),
           description: document.getElementById('surveyDescription').value.trim(),
           questions: state.questions.map((q) => ({
+            id: q.id,
             title: q.title,
             type: q.type,
             required: q.required,
-            options: needsOptions(q.type) ? q.options : [],
+            options: needsOptions(q.type) ? q.options.map((opt) => opt.text) : [],
+            branching:
+              q.type === 'multiple_choice'
+                ? q.options
+                    .filter((opt) => opt.nextQuestionId)
+                    .map((opt) => ({
+                      answer: opt.text,
+                      goToQuestionId: opt.nextQuestionId,
+                    }))
+                : [],
           })),
         };
       }
@@ -299,7 +357,11 @@
           const withOptions = needsOptions(type);
           updateQuestion(idx, {
             type,
-            options: withOptions ? (state.questions[idx].options.length ? state.questions[idx].options : ['옵션 1']) : [],
+            options: withOptions
+              ? state.questions[idx].options.length
+                ? state.questions[idx].options
+                : normalizeOptions(['옵션 1'])
+              : [],
           });
           render();
         });
@@ -339,9 +401,33 @@
             const optionInput = document.createElement('input');
             optionInput.className = 'option-input';
             optionInput.type = 'text';
-            optionInput.value = opt;
+            optionInput.value = opt.text;
             optionInput.addEventListener('input', (e) => {
-              question.options[optionIdx] = e.target.value;
+              question.options[optionIdx].text = e.target.value;
+            });
+
+            const branchSelect = document.createElement('select');
+            branchSelect.className = 'branch-select';
+            branchSelect.hidden = question.type !== 'multiple_choice';
+
+            const defaultBranch = document.createElement('option');
+            defaultBranch.value = '';
+            defaultBranch.textContent = '다음 질문(기본 순서)';
+            defaultBranch.selected = !opt.nextQuestionId;
+            branchSelect.appendChild(defaultBranch);
+
+            state.questions
+              .filter((targetQuestion) => targetQuestion.id !== question.id)
+              .forEach((targetQuestion, targetIndex) => {
+                const target = document.createElement('option');
+                target.value = targetQuestion.id;
+                target.textContent = `${targetIndex + 1}. ${targetQuestion.title || '제목 없는 질문'}`;
+                target.selected = opt.nextQuestionId === targetQuestion.id;
+                branchSelect.appendChild(target);
+              });
+
+            branchSelect.addEventListener('change', (e) => {
+              question.options[optionIdx].nextQuestionId = e.target.value || null;
             });
 
             const removeOptionBtn = document.createElement('button');
@@ -350,7 +436,7 @@
             removeOptionBtn.textContent = '삭제';
             removeOptionBtn.addEventListener('click', () => removeOption(idx, optionIdx));
 
-            row.append(icon, optionInput, removeOptionBtn);
+            row.append(icon, optionInput, branchSelect, removeOptionBtn);
             options.appendChild(row);
           });
 
